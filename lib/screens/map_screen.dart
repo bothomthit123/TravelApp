@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:http/http.dart' as http;
 import 'package:mobiledev/models/favorite.dart';
+import 'package:mobiledev/models/search_history.dart'; // ✅ Import model
 
 class FsqPlace {
   final int placeId;
@@ -41,14 +42,12 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> saveToFavorite(Favorite favorite) async {
-    const String apiUrl = 'https://travelappapi-2.onrender.com/api/Favorite'; // Cập nhật lại URL
+    const String apiUrl = 'https://travelappapi-2.onrender.com/api/Favorite';
 
     try {
       final response = await http.post(
         Uri.parse(apiUrl),
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode(favorite.toJson()),
       );
 
@@ -57,7 +56,6 @@ class _MapScreenState extends State<MapScreen> {
           const SnackBar(content: Text('Đã lưu địa điểm yêu thích thành công!')),
         );
       } else {
-        // Nếu có lỗi
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Lỗi khi lưu: ${response.statusCode}')),
         );
@@ -67,7 +65,6 @@ class _MapScreenState extends State<MapScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi: $e')),
       );
-      print('Lỗi: $e');
     }
   }
 
@@ -81,12 +78,42 @@ class _MapScreenState extends State<MapScreen> {
       category: place.category,
       latitude: place.lat,
       longitude: place.lng,
-      description: '', // Bạn có thể thêm mô tả riêng
-      rating: 5.0, // Hoặc rating giả định, hoặc chưa có
+      description: '',
+      rating: 5.0,
       savedAt: DateTime.now(),
     );
     await saveToFavorite(favorite);
   }
+
+  Future<void> saveSearchHistory(String query) async {
+    final search = SearchHistory(
+      accountId: 1, // thay bằng ID người dùng đăng nhập thực tế
+      searchQuery: query,
+      searchedAt: DateTime.now(),
+    );
+
+    final url = Uri.parse('https://travelappapi-2.onrender.com/api/SearchHistory');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(search.toJson()),
+      );
+
+      print('📤 JSON gửi đi: ${jsonEncode(search.toJson())}');
+      print('📥 Phản hồi: ${response.statusCode} - ${response.body}');
+
+      if (response.statusCode == 201) {
+        print('✅ Lưu lịch sử tìm kiếm thành công!');
+      } else {
+        print('❌ Lỗi khi lưu lịch sử tìm kiếm: ${response.statusCode}');
+      }
+    } catch (e) {
+      print('❌ Lỗi kết nối khi lưu lịch sử tìm kiếm: $e');
+    }
+  }
+
 
   void _showPlaceDetails(FsqPlace place) {
     showModalBottomSheet(
@@ -124,7 +151,7 @@ class _MapScreenState extends State<MapScreen> {
                 children: [
                   ElevatedButton.icon(
                     onPressed: () {
-                      _saveToFavorites(1, place.placeId); // ← Gọi đúng hàm
+                      _saveToFavorites(1, place.placeId);
                       Navigator.pop(context);
                     },
                     icon: const Icon(Icons.favorite_border),
@@ -174,9 +201,7 @@ class _MapScreenState extends State<MapScreen> {
                 urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                 subdomains: const ['a', 'b', 'c'],
               ),
-              MarkerLayer(
-                markers: _placeMarkers,
-              ),
+              MarkerLayer(markers: _placeMarkers),
             ],
           ),
           Positioned(
@@ -248,6 +273,10 @@ class _MapScreenState extends State<MapScreen> {
 
   Future<void> _searchPlaces(String query) async {
     if (_currentPosition == null) return;
+
+    // ✅ Gọi không chờ (để tránh cản trở map)
+    saveSearchHistory(query);
+
     setState(() {
       _loading = true;
       _placeMarkers.clear();
@@ -257,56 +286,61 @@ class _MapScreenState extends State<MapScreen> {
       'https://api.foursquare.com/v3/places/search?query=$query&ll=${_currentPosition!.latitude},${_currentPosition!.longitude}&limit=10',
     );
 
-    final response = await http.get(uri, headers: {
-      'Authorization': _foursquareApiKey,
-      'Accept': 'application/json',
-    });
-
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      final List results = data['results'];
-      final fetchedPlaces = <FsqPlace>[];
-
-      final markers = results.asMap().entries.map((entry) {
-        int index = entry.key;
-        final place = entry.value;
-        final lat = place['geocodes']['main']['latitude'];
-        final lng = place['geocodes']['main']['longitude'];
-        final name = place['name'];
-        final address = place['location']['formatted_address'] ?? 'Không rõ';
-        final category = (place['categories']?.isNotEmpty ?? false)
-            ? place['categories'][0]['name']
-            : 'Không rõ loại';
-
-        final fsqPlace = FsqPlace(index + 1, name, address, category, lat, lng);
-        fetchedPlaces.add(fsqPlace);
-
-        return Marker(
-          point: LatLng(lat, lng),
-          width: 40,
-          height: 40,
-          child: GestureDetector(
-            onTap: () => _showPlaceDetails(fsqPlace),
-            child: const Icon(Icons.location_on, color: Colors.green, size: 36),
-          ),
-        );
-      }).toList();
-
-      setState(() {
-        _placeMarkers = List<Marker>.from(markers);
-        _fetchedPlaces = fetchedPlaces;
-        _loading = false;
+    try {
+      final response = await http.get(uri, headers: {
+        'Authorization': _foursquareApiKey,
+        'Accept': 'application/json',
       });
 
-      if (results.isNotEmpty) {
-        final first = results.first;
-        final firstLat = first['geocodes']['main']['latitude'];
-        final firstLng = first['geocodes']['main']['longitude'];
-        _mapController.move(LatLng(firstLat, firstLng), 15.0);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final List results = data['results'];
+        final fetchedPlaces = <FsqPlace>[];
+
+        final markers = results.asMap().entries.map((entry) {
+          int index = entry.key;
+          final place = entry.value;
+          final lat = place['geocodes']['main']['latitude'];
+          final lng = place['geocodes']['main']['longitude'];
+          final name = place['name'];
+          final address = place['location']['formatted_address'] ?? 'Không rõ';
+          final category = (place['categories']?.isNotEmpty ?? false)
+              ? place['categories'][0]['name']
+              : 'Không rõ loại';
+
+          final fsqPlace = FsqPlace(index + 1, name, address, category, lat, lng);
+          fetchedPlaces.add(fsqPlace);
+
+          return Marker(
+            point: LatLng(lat, lng),
+            width: 40,
+            height: 40,
+            child: GestureDetector(
+              onTap: () => _showPlaceDetails(fsqPlace),
+              child: const Icon(Icons.location_on, color: Colors.green, size: 36),
+            ),
+          );
+        }).toList();
+
+        setState(() {
+          _placeMarkers = List<Marker>.from(markers);
+          _fetchedPlaces = fetchedPlaces;
+          _loading = false;
+        });
+
+        if (results.isNotEmpty) {
+          final first = results.first;
+          final firstLat = first['geocodes']['main']['latitude'];
+          final firstLng = first['geocodes']['main']['longitude'];
+          _mapController.move(LatLng(firstLat, firstLng), 15.0);
+        }
+      } else {
+        throw Exception('Lỗi Foursquare: ${response.statusCode}');
       }
-    } else {
+    } catch (e) {
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Lỗi tìm kiếm địa điểm")));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("❌ Lỗi tìm kiếm: $e")));
     }
   }
+
 }
