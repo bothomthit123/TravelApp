@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animated_background/animated_background.dart';
-import 'package:mobiledev/screens/account_screen.dart';
 import 'package:mobiledev/screens/dashboard_screen.dart';
 import 'package:mobiledev/screens/sign_up_screen.dart';
 import 'package:http/http.dart' as http;
@@ -32,8 +31,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       _errorMessage = null;
     });
 
-    final url = Uri.parse("http://10.0.2.2:5022/api/Account/login");
-
+    final url = Uri.parse("https://travelappapi-2.onrender.com/api/Account/login"); //
     final body = jsonEncode({
       "username": _emailController.text,
       "password": _passwordController.text,
@@ -50,7 +48,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
         final username = data["username"];
         final email = data["email"];
-
+        final accountId = data["accountId"];  // Lấy accountId từ phản hồi API
         setState(() {
           _isLoading = false;
         });
@@ -63,7 +61,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => DashboardScreen(username: username, email: email),
+            builder: (context) => DashboardScreen(
+              username: username,
+              email: email,
+              accountId: accountId,  // Truyền đúng accountId từ API
+            ),
           ),
         );
 
@@ -102,7 +104,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                     SizedBox(height: 20),
                     Text(
                       'Welcome to Smart Travel',
-                      style: GoogleFonts.lato(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: GoogleFonts.lato(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.black54),
                     ),
                     SizedBox(height: 20),
                     Card(
